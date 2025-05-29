@@ -1,0 +1,721 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Mary Superpoderosa (Single File)</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React and ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  
+  <!-- Babel for JSX Transpilation -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Arial', sans-serif;
+      overflow: hidden; /* Prevent scrollbars from game container */
+      background-color: #000000; /* Black background */
+      color: #e0e0e0; /* Light gray text for noscript */
+      touch-action: none; /* Prevent default touch actions like pinch-zoom globally */
+    }
+    #root {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      width: 100vw;
+    }
+    .game-font {
+        font-family: 'Comic Sans MS', 'Chalkboard SE', 'Marker Felt', sans-serif;
+    }
+    .touch-control-button {
+        user-select: none; 
+        -webkit-user-select: none; 
+        -moz-user-select: none;
+        -ms-user-select: none; 
+        touch-action: manipulation; /* Crucial for preventing zoom/scroll on double tap on buttons */
+        -webkit-tap-highlight-color: transparent; /* Remove tap highlight on iOS */
+    }
+    
+    @keyframes twinkle {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(0.9); }
+    }
+    @keyframes levelUpFade {
+      0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+      20% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+      80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); display: none; }
+    }
+    @keyframes maryBobbing {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-3px); }
+    }
+    .score-pulse {
+      animation: scorePulseAnim 0.3s ease-out;
+    }
+    @keyframes scorePulseAnim {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.2); }
+      100% { transform: scale(1); }
+    }
+    .game-over-shake {
+      animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+    }
+    @keyframes shake {
+      10%, 90% { transform: translate3d(-1px, 0, 0) scale(var(--game-scale, 1)); }
+      20%, 80% { transform: translate3d(2px, 0, 0) scale(var(--game-scale, 1)); }
+      30%, 50%, 70% { transform: translate3d(-3px, 0, 0) scale(var(--game-scale, 1)); }
+      40%, 60% { transform: translate3d(3px, 0, 0) scale(var(--game-scale, 1)); }
+    }
+  </style>
+</head>
+<body>
+  <noscript>Necesitas habilitar JavaScript para ejecutar esta aplicación.</noscript>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    // --- START OF constants.ts content ---
+    const GAME_WIDTH = 800;
+    const GAME_HEIGHT = 600;
+
+    const MARY_WIDTH = 55; // Slightly wider for new shape
+    const MARY_HEIGHT = 75; // Adjusted for new shape and cape
+    const MARY_BODY_WIDTH = 50;
+    const MARY_BODY_HEIGHT = 50;
+    const MARY_INITIAL_X = 50;
+    const MARY_INITIAL_Y = GAME_HEIGHT / 2 - MARY_HEIGHT / 2;
+    const MARY_MOVE_STEP = 20; 
+    const MARY_HORIZONTAL_MOVE_STEP = 15; 
+
+    const MARY_MIN_X = 0;
+    const MARY_MAX_X = GAME_WIDTH - MARY_WIDTH;
+
+    const STAR_SIZE = 30;
+    const OBSTACLE_WIDTH = 40;
+    const OBSTACLE_HEIGHT = 40;
+
+    const BASE_OBJECT_SPEED = 3; // Slightly reduced initial speed
+    const SPEED_INCREMENT_PER_LEVEL = 0.20; // Slightly reduced speed increment
+
+    const BASE_OBJECT_SPAWN_INTERVAL = 1800; // Slightly increased initial interval
+    const SPAWN_DECREMENT_PER_LEVEL = 60; // Slightly reduced decrement
+    const MIN_SPAWN_INTERVAL = 600; // Slightly increased minimum
+
+    const BASE_OBSTACLE_PROBABILITY = 0.30; // Initial 30% chance
+    const OBSTACLE_PROB_INCREMENT_PER_LEVEL = 0.025; 
+    const MAX_OBSTACLE_PROBABILITY = 0.65; 
+
+    const MAX_OBJECTS = 15; // Allow a few more objects
+
+    const STAR_POINTS = 10;
+    const POINTS_PER_LEVEL = 50; 
+    const CAPE_COLORS = ['#eab308', '#34d399', '#60a5fa', '#f472b6', '#a78bfa']; 
+    // --- END OF constants.ts content ---
+
+    // --- START OF types.ts content ---
+    const GameObjectType = {
+      Star: 'STAR',
+      Obstacle: 'OBSTACLE',
+    };
+
+    const GameState = {
+      StartScreen: 'START_SCREEN',
+      Playing: 'PLAYING',
+      GameOver: 'GAME_OVER',
+    };
+    // --- END OF types.ts content ---
+
+    // --- START OF Mary.tsx content ---
+    const Mary = ({ position, level, verticalMovement }) => {
+      const capeColor = CAPE_COLORS[(level - 1) % CAPE_COLORS.length];
+      
+      const maryFaceImageUrl = "REEMPLAZA_ESTO_CON_TU_IMAGEN_BASE64_DE_MARY"; 
+
+      const bodyTilt = verticalMovement === 'up' ? -8 : (verticalMovement === 'down' ? 8 : 0);
+      const bodyBobbing = verticalMovement === 'none';
+
+      return (
+        <div
+          style={{
+            position: 'absolute',
+            left: position.x,
+            top: position.y,
+            width: MARY_WIDTH,
+            height: MARY_HEIGHT,
+            transition: 'top 0.1s ease-out, left 0.1s ease-out, transform 0.15s ease-out',
+            transform: `rotate(${bodyTilt}deg)`,
+            animation: bodyBobbing ? 'maryBobbing 1.2s infinite ease-in-out' : 'none',
+          }}
+          aria-label="Mary Superpoderosa"
+          role="img"
+        >
+          <div style={{
+            position: 'absolute',
+            width: MARY_BODY_WIDTH,
+            height: MARY_BODY_HEIGHT,
+            left: (MARY_WIDTH - MARY_BODY_WIDTH) / 2, 
+            top: 0, 
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}>
+            <svg 
+              viewBox="0 0 60 60" 
+              style={{ 
+                width: '100%', 
+                height: '100%', 
+                position: 'absolute', 
+                zIndex: 1 
+              }}
+            >
+              <path 
+                d="M30 2 L55 15 L50 50 L30 58 L10 50 L5 15 Z"
+                fill="#ec4899" 
+                stroke="#a3e635" 
+                strokeWidth="3" 
+              />
+               <path d="M30 6 L48 18 L44 46 L30 53 L16 46 L12 18 Z"
+                 fill="rgba(255,255,255,0.1)" />
+            </svg>
+
+            <div style={{
+                width: '70%', 
+                height: '70%',
+                position: 'relative', 
+                zIndex: 2,
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+            }}>
+                {maryFaceImageUrl !== "REEMPLAZA_ESTO_CON_TU_IMAGEN_BASE64_DE_MARY" ? (
+                    <img 
+                        src={maryFaceImageUrl}
+                        alt="Cara de Mary"
+                        style={{
+                            width: '100%', 
+                            height: '100%',
+                            objectFit: 'cover', 
+                            borderRadius: '50%',
+                            border: '2px solid white'
+                        }} 
+                    />
+                ) : (
+                    <div style={{
+                        width: '100%', 
+                        height: '100%',
+                        borderRadius: '50%',
+                        border: '2px solid white',
+                        backgroundColor: '#f0f0f0',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        fontSize: '10px',
+                        color: '#333',
+                        textAlign: 'center',
+                        padding: '2px'
+                    }}><span>Reemplazar Imagen</span></div>
+                )}
+                <svg 
+                    viewBox="0 0 20 10" 
+                    style={{
+                        position: 'absolute',
+                        bottom: '10%', 
+                        width: '50%', 
+                        height: 'auto',
+                        zIndex: 3, 
+                    }}
+                >
+                    <path 
+                        d="M 2 5 Q 10 10 18 5" 
+                        stroke="#333333" 
+                        strokeWidth="1.5"
+                        fill="transparent"
+                    />
+                </svg>
+            </div>
+          </div>
+
+          <div
+            style={{
+              position: 'absolute',
+              top: MARY_BODY_HEIGHT * 0.6, 
+              left: (MARY_WIDTH - (MARY_BODY_WIDTH * 0.5)) / 2, 
+              width: 0,
+              height: 0,
+              borderLeft: `${MARY_BODY_WIDTH * 0.25}px solid transparent`, 
+              borderRight: `${MARY_BODY_WIDTH * 0.25}px solid transparent`, 
+              borderTop: `${MARY_HEIGHT - MARY_BODY_HEIGHT * 0.8}px solid ${capeColor}`, 
+              zIndex: 0, 
+              transition: 'border-top-color 0.5s ease-in-out',
+            }}
+          />
+        </div>
+      );
+    };
+    // --- END OF Mary.tsx content ---
+
+    // --- START OF Collectible.tsx content ---
+    const Collectible = ({ position }) => {
+      return (
+        <div
+          style={{
+            position: 'absolute',
+            left: position.x,
+            top: position.y,
+            width: STAR_SIZE,
+            height: STAR_SIZE,
+            color: '#fde047', 
+            fontSize: `${STAR_SIZE}px`,
+            lineHeight: `${STAR_SIZE}px`,
+            textAlign: 'center',
+            animation: 'twinkle 1.5s infinite ease-in-out',
+            textShadow: '0 0 5px #fde047, 0 0 10px #fde047' 
+          }}
+          role="img"
+          aria-label="Estrella brillante"
+        >
+          ★
+        </div>
+      );
+    };
+    // --- END OF Collectible.tsx content ---
+
+    // --- START OF Obstacle.tsx content ---
+    const Obstacle = ({ position }) => {
+      return (
+        <div
+          style={{
+            position: 'absolute',
+            left: position.x,
+            top: position.y,
+            width: OBSTACLE_WIDTH,
+            height: OBSTACLE_HEIGHT,
+          }}
+          role="img"
+          aria-label="Obstáculo roca oscura"
+        >
+          <svg viewBox="0 0 100 100" fill="#3f3f46" className="w-full h-full">
+            <path d="M85.8,67.3c-9.4,14.5-25.3,24.6-43.7,24.6c-16.5,0-31.1-8.3-40.1-20.9C-6.3,57.6-1.6,39,11.6,27.4 C24.7,15.7,42.5,10.1,59.7,13.2C76.9,16.3,90.3,30.4,91.8,47.5C93.4,60.9,90.3,64.6,85.8,67.3z M55.5,26.2 c-3.7-0.9-7.5-1.4-11.4-1.4c-12.8,0-24.3,6.6-31.1,16.9c-9.3,14.2-8.3,32.6,2.4,45.5c9.2,10.9,22.6,17.4,37.2,17.4 c13.3,0,25.4-5.8,33.7-15.6c11.1-13.2,13.2-30.9,5.3-45.8C84.5,32.6,71.4,24.1,55.5,26.2z"/>
+          </svg>
+        </div>
+      );
+    };
+    // --- END OF Obstacle.tsx content ---
+
+    // --- START OF StartScreen.tsx content ---
+    const StartScreen = ({ onStartGame }) => {
+      return (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-black p-4 md:p-8 text-center">
+          <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold mb-4 drop-shadow-lg game-font text-lime-400"
+              style={{ textShadow: '0 0 5px #a3e635, 0 0 10px #a3e635, 0 0 15px #84cc16' }} >
+            Mary Superpoderosa
+          </h1>
+          <p className="text-lg sm:text-xl md:text-2xl mb-6 md:mb-8 drop-shadow-md game-font text-cyan-300"
+             style={{ textShadow: '0 0 3px #67e8f9, 0 0 6px #22d3ee' }}>
+            ¡Ayuda a Mary a recoger estrellas, esquivar obstáculos y subir de nivel! ¡Cada nivel es un nuevo desafío!
+          </p>
+          <button
+            onClick={onStartGame}
+            className="px-6 py-3 md:px-8 md:py-4 bg-lime-500 hover:bg-lime-600 text-black font-bold text-xl md:text-2xl rounded-full shadow-xl transform hover:scale-105 transition-all duration-200 game-font focus:outline-none focus:ring-4 focus:ring-lime-300 border-2 border-lime-300"
+            aria-label="Empezar Aventura"
+          >
+            ¡Empezar Aventura!
+          </button>
+        </div>
+      );
+    };
+    // --- END OF StartScreen.tsx content ---
+
+    // --- START OF GameOverScreen.tsx content ---
+    const GameOverScreen = ({ score, level, onPlayAgain }) => { 
+      return (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-black p-4 md:p-8 text-center">
+          <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-4 md:mb-6 text-red-500 drop-shadow-lg game-font"
+              style={{ textShadow: '0 0 5px #ef4444, 0 0 10px #ef4444' }}>
+            ¡Juego Terminado!
+          </h2>
+          <p className="text-2xl sm:text-3xl md:text-4xl mb-2 game-font text-cyan-300">
+            Puntuación Final: <span className="text-yellow-300 font-bold" style={{ textShadow: '0 0 5px #fde047, 0 0 10px #fde047' }}>{score}</span>
+          </p>
+          <p className="text-xl sm:text-2xl md:text-3xl mb-4 game-font text-cyan-300">
+            Nivel Alcanzado: <span className="text-violet-400 font-bold" style={{ textShadow: '0 0 5px #a78bfa, 0 0 10px #a78bfa' }}>{level}</span>
+          </p>
+          <p className="text-md sm:text-lg md:text-xl mb-6 md:mb-8 game-font text-cyan-400">
+            {score > 50 ? (level > 3 ? "¡Dominas los cielos, Super Mary!" : "¡Increíble, Mary es imparable!") : "¡Sigue intentándolo, Super Mary!"}
+          </p>
+          <button
+            onClick={onPlayAgain}
+            className="px-6 py-3 md:px-8 md:py-4 bg-lime-500 hover:bg-lime-600 text-black font-bold text-xl md:text-2xl rounded-full shadow-xl transform hover:scale-105 transition-all duration-200 game-font focus:outline-none focus:ring-4 focus:ring-lime-300 border-2 border-lime-300"
+            aria-label="Jugar de Nuevo"
+          >
+            Jugar de Nuevo
+          </button>
+        </div>
+      );
+    };
+    // --- END OF GameOverScreen.tsx content ---
+
+    // --- START OF GameScreen.tsx content ---
+    const GameScreen = ({ onGameOver, onScoreUpdate, currentScore, level }) => {
+      const [maryPosition, setMaryPosition] = React.useState({ x: MARY_INITIAL_X, y: MARY_INITIAL_Y });
+      const [gameObjects, setGameObjects] = React.useState([]);
+      const [verticalMovement, setVerticalMovement] = React.useState('none'); 
+      
+      const gameAreaRef = React.useRef(null);
+      const requestRef = React.useRef(null);
+      const lastSpawnTimeRef = React.useRef(performance.now());
+      const movementTimeoutRef = React.useRef(null);
+
+      const maryPositionRef = React.useRef(maryPosition);
+      const gameObjectsRef = React.useRef(gameObjects);
+      const levelRef = React.useRef(level);
+
+      React.useEffect(() => { maryPositionRef.current = maryPosition; }, [maryPosition]);
+      React.useEffect(() => { gameObjectsRef.current = gameObjects; }, [gameObjects]);
+      React.useEffect(() => { levelRef.current = level; }, [level]);
+
+
+      const moveMary = React.useCallback((direction) => {
+        setMaryPosition(prev => {
+          let newX = prev.x;
+          let newY = prev.y;
+          let currentVerticalMovement = 'none';
+          if (direction === 'up') {
+            newY = Math.max(0, prev.y - MARY_MOVE_STEP);
+            currentVerticalMovement = 'up';
+          } else if (direction === 'down') {
+            newY = Math.min(GAME_HEIGHT - MARY_HEIGHT, prev.y + MARY_MOVE_STEP);
+            currentVerticalMovement = 'down';
+          } else if (direction === 'left') {
+            newX = Math.max(MARY_MIN_X, prev.x - MARY_HORIZONTAL_MOVE_STEP);
+          } else if (direction === 'right') {
+            newX = Math.min(MARY_MAX_X, prev.x + MARY_HORIZONTAL_MOVE_STEP);
+          }
+          
+          if (currentVerticalMovement !== 'none') {
+            setVerticalMovement(currentVerticalMovement);
+            if (movementTimeoutRef.current) clearTimeout(movementTimeoutRef.current);
+            movementTimeoutRef.current = setTimeout(() => setVerticalMovement('none'), 150);
+          }
+          return { x: newX, y: newY };
+        });
+      }, []); 
+
+      React.useEffect(() => {
+        const handleKeyDown = (event) => {
+          if (event.key === 'ArrowUp') moveMary('up');
+          else if (event.key === 'ArrowDown') moveMary('down');
+          else if (event.key === 'ArrowLeft') moveMary('left');
+          else if (event.key === 'ArrowRight') moveMary('right');
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+          window.removeEventListener('keydown', handleKeyDown);
+          if (movementTimeoutRef.current) {
+             clearTimeout(movementTimeoutRef.current);
+             movementTimeoutRef.current = null;
+          }
+        }
+      }, [moveMary]);
+
+      const gameLoop = React.useCallback(() => {
+        const now = performance.now();
+        const currentLvl = levelRef.current;
+
+        const currentObjectSpeed = BASE_OBJECT_SPEED + (currentLvl - 1) * SPEED_INCREMENT_PER_LEVEL;
+        const spawnIntervalReductionValue = (currentLvl - 1) * SPAWN_DECREMENT_PER_LEVEL;
+        const currentSpawnInterval = Math.max(MIN_SPAWN_INTERVAL, BASE_OBJECT_SPAWN_INTERVAL - spawnIntervalReductionValue);
+        const currentObstacleProbability = Math.min(MAX_OBSTACLE_PROBABILITY, BASE_OBSTACLE_PROBABILITY + (currentLvl - 1) * OBSTACLE_PROB_INCREMENT_PER_LEVEL);
+
+        let workingObjectsList = [...gameObjectsRef.current];
+
+        // Attempt to spawn new object
+        if (now - lastSpawnTimeRef.current > currentSpawnInterval && workingObjectsList.length < MAX_OBJECTS) {
+            const objectType = Math.random() < currentObstacleProbability ? GameObjectType.Obstacle : GameObjectType.Star;
+            const newObjectY = Math.random() * (GAME_HEIGHT - (objectType === GameObjectType.Star ? STAR_SIZE : OBSTACLE_HEIGHT));
+            const newObject = {
+                id: `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`, // More robust unique ID
+                type: objectType,
+                x: GAME_WIDTH, // Spawn at the right edge
+                y: newObjectY,
+            };
+            workingObjectsList.push(newObject);
+            lastSpawnTimeRef.current = now;
+        }
+
+        let scoreDelta = 0;
+        let gameOverTriggered = false;
+
+        const processedObjects = workingObjectsList.map(obj => ({
+            ...obj,
+            x: obj.x - currentObjectSpeed, // Move object
+        })).filter(obj => {
+            const objWidth = obj.type === GameObjectType.Star ? STAR_SIZE : OBSTACLE_WIDTH;
+            const objHeight = obj.type === GameObjectType.Star ? STAR_SIZE : OBSTACLE_HEIGHT;
+            
+            const maryRect = {
+                x: maryPositionRef.current.x,
+                y: maryPositionRef.current.y,
+                width: MARY_WIDTH,
+                height: MARY_HEIGHT,
+            };
+            // Use the ALREADY MOVED obj.x for collision and off-screen checks for THIS frame
+            const objRect = {
+                x: obj.x, 
+                y: obj.y,
+                width: objWidth,
+                height: objHeight,
+            };
+
+            if (
+                maryRect.x < objRect.x + objRect.width &&
+                maryRect.x + maryRect.width > objRect.x &&
+                maryRect.y < objRect.y + objRect.height &&
+                maryRect.y + maryRect.height > objRect.y
+            ) {
+                if (obj.type === GameObjectType.Star) {
+                    scoreDelta += STAR_POINTS;
+                    return false; // Star collected, remove it
+                } else if (obj.type === GameObjectType.Obstacle) {
+                    gameOverTriggered = true;
+                    // Obstacle that caused game over will be naturally filtered out if it also goes off-screen.
+                    // Or it will remain if game over stops the loop.
+                }
+            }
+
+            if (obj.x + objWidth < 0) { // Filter if off-screen (after movement and potential collision)
+                return false;
+            }
+            
+            return true; // Keep object if not collided (as star) or not off-screen
+        });
+        
+        setGameObjects(processedObjects); // Single state update with the final list of objects for this frame
+
+        if (scoreDelta > 0) {
+            onScoreUpdate(scoreDelta);
+        }
+
+        if (gameOverTriggered) {
+            if (gameAreaRef.current) {
+                gameAreaRef.current.classList.add('game-over-shake');
+                 setTimeout(() => {
+                    if(gameAreaRef.current) gameAreaRef.current.classList.remove('game-over-shake');
+                    onGameOver(); // Call onGameOver after animation
+                }, 400);
+            } else {
+                 onGameOver(); // Call immediately if no ref
+            }
+            if (requestRef.current) cancelAnimationFrame(requestRef.current);
+            return;
+        }
+        
+        requestRef.current = requestAnimationFrame(gameLoop);
+      }, [onGameOver, onScoreUpdate]); 
+
+      // Effect for game loop
+      React.useEffect(() => {
+        requestRef.current = requestAnimationFrame(gameLoop);
+        return () => {
+          if (requestRef.current) {
+            cancelAnimationFrame(requestRef.current);
+          }
+          // movementTimeoutRef is cleared in the keydown effect's cleanup
+        };
+      }, [gameLoop]);
+
+      // Effect for scaling and resize listener
+      React.useEffect(() => {
+        const updateScale = () => {
+            if (gameAreaRef.current) {
+                const parentElement = gameAreaRef.current.parentElement;
+                if (!parentElement) return;
+
+                const parentWidth = parentElement.clientWidth;
+                const parentHeight = parentElement.clientHeight;
+
+                const scaleX = parentWidth / GAME_WIDTH;
+                const scaleY = parentHeight / GAME_HEIGHT;
+                const scale = Math.min(scaleX, scaleY, 1); 
+                
+                gameAreaRef.current.style.transform = `scale(${scale})`;
+                gameAreaRef.current.style.setProperty('--game-scale', scale.toString());
+            }
+        };
+
+        updateScale(); // Initial scale
+        window.addEventListener('resize', updateScale);
+
+        return () => {
+          window.removeEventListener('resize', updateScale);
+        };
+      }, []); // Empty dependency array: runs once on mount, cleans up on unmount.
+
+
+      const handleTouchInteraction = (direction) => (e) => {
+        e.preventDefault(); 
+        moveMary(direction);
+      };
+      
+      return (
+        <div 
+            ref={gameAreaRef}
+            style={{ 
+                width: GAME_WIDTH, 
+                height: GAME_HEIGHT, 
+                position: 'relative', 
+                overflow: 'hidden', 
+                backgroundColor: '#0a0a23', 
+                border: '2px solid #a3e635', 
+                borderRadius: '10px',
+                boxShadow: '0 0 20px #a3e635, inset 0 0 15px rgba(163, 230, 53, 0.3)',
+                transformOrigin: 'center center' // Scale from center
+            }}
+            aria-roledescription="Game area"
+            className="touch-manipulation" 
+        >
+          <Mary position={maryPosition} level={level} verticalMovement={verticalMovement} />
+          {gameObjects.map(obj => {
+            if (obj.type === GameObjectType.Star) {
+              return <Collectible key={obj.id} position={{ x: obj.x, y: obj.y }} />;
+            } else if (obj.type === GameObjectType.Obstacle) {
+              return <Obstacle key={obj.id} position={{ x: obj.x, y: obj.y }} />;
+            }
+            return null;
+          })}
+
+          <div style={{ position: 'absolute', bottom: '20px', left: '20px', zIndex: 100, display: 'flex', gap: '10px'}}>
+            <button 
+                onTouchStart={handleTouchInteraction('left')} 
+                onMouseDown={handleTouchInteraction('left')}
+                className="touch-control-button bg-lime-500 text-black p-3 rounded-full shadow-lg opacity-75 hover:opacity-100 text-2xl w-16 h-16 flex items-center justify-center game-font"
+                aria-label="Mover izquierda"
+            >⬅️</button>
+             <button 
+                onTouchStart={handleTouchInteraction('right')} 
+                onMouseDown={handleTouchInteraction('right')}
+                className="touch-control-button bg-lime-500 text-black p-3 rounded-full shadow-lg opacity-75 hover:opacity-100 text-2xl w-16 h-16 flex items-center justify-center game-font"
+                aria-label="Mover derecha"
+            >➡️</button>
+          </div>
+          <div style={{ position: 'absolute', bottom: '20px', right: '20px', zIndex: 100, display: 'flex', gap: '10px', flexDirection: 'column' }}>
+            <button 
+                onTouchStart={handleTouchInteraction('up')} 
+                onMouseDown={handleTouchInteraction('up')} 
+                className="touch-control-button bg-lime-500 text-black p-3 rounded-full shadow-lg opacity-75 hover:opacity-100 text-2xl w-16 h-16 flex items-center justify-center game-font"
+                aria-label="Mover arriba"
+            >⬆️</button>
+            <button 
+                onTouchStart={handleTouchInteraction('down')} 
+                onMouseDown={handleTouchInteraction('down')} 
+                className="touch-control-button bg-lime-500 text-black p-3 rounded-full shadow-lg opacity-75 hover:opacity-100 text-2xl w-16 h-16 flex items-center justify-center game-font"
+                aria-label="Mover abajo"
+            >⬇️</button>
+          </div>
+        </div>
+      );
+    };
+    // --- END OF GameScreen.tsx content ---
+
+    // --- START OF App.tsx content ---
+    const App = () => {
+      const [gameState, setGameState] = React.useState(GameState.StartScreen);
+      const [score, setScore] = React.useState(0);
+      const [level, setLevel] = React.useState(1);
+      const [showLevelUp, setShowLevelUp] = React.useState(false);
+      const scoreDisplayRef = React.useRef(null);
+
+      const startGame = () => {
+        setScore(0);
+        setLevel(1);
+        setShowLevelUp(false);
+        setGameState(GameState.Playing);
+      };
+
+      const handleGameOver = () => {
+        setGameState(GameState.GameOver);
+      };
+
+      const handleScoreUpdate = (points) => {
+        setScore(prevScore => {
+            const newScore = prevScore + points;
+            if (scoreDisplayRef.current) {
+                scoreDisplayRef.current.classList.add('score-pulse');
+                setTimeout(() => {
+                     if (scoreDisplayRef.current) scoreDisplayRef.current.classList.remove('score-pulse');
+                }, 300);
+            }
+
+            const newLevel = Math.floor(newScore / POINTS_PER_LEVEL) + 1;
+            if (newLevel > level) { 
+              setLevel(newLevel); 
+              setShowLevelUp(true);
+              setTimeout(() => setShowLevelUp(false), 2000); 
+            }
+            return newScore;
+        });
+      };
+      
+      const getGameBackgroundStyle = () => {
+        if (gameState === GameState.Playing) return 'bg-gray-900'; 
+        return 'bg-black';
+      };
+
+      return (
+        <div className={`w-screen h-screen flex flex-col items-center justify-center p-1 md:p-2 ${getGameBackgroundStyle()} relative`}>
+          {gameState === GameState.StartScreen && <StartScreen onStartGame={startGame} />}
+          {gameState === GameState.GameOver && <GameOverScreen score={score} level={level} onPlayAgain={startGame} />}
+          
+          {gameState === GameState.Playing && (
+            <>
+              <div 
+                className="absolute top-1 left-1/2 transform -translate-x-1/2 z-50 p-2 bg-black bg-opacity-60 rounded-lg shadow-xl border-2 border-lime-400 game-font text-sm sm:text-base md:text-lg"
+              >
+                <span ref={scoreDisplayRef} className="text-yellow-300 mr-2 md:mr-4" style={{ textShadow: '0 0 3px #fde047' }}>
+                  Puntos: {score}
+                </span>
+                <span className="text-violet-400" style={{ textShadow: '0 0 3px #a78bfa' }}>
+                  Nivel: {level}
+                </span>
+              </div>
+              <GameScreen 
+                onGameOver={handleGameOver} 
+                onScoreUpdate={handleScoreUpdate} 
+                currentScore={score} 
+                level={level} 
+              />
+              {showLevelUp && (
+                <div 
+                  className="absolute top-1/2 left-1/2 z-50 text-4xl sm:text-5xl md:text-6xl font-bold text-yellow-300 p-4 bg-black bg-opacity-75 rounded-xl shadow-2xl game-font"
+                  style={{ 
+                    animation: 'levelUpFade 2s ease-out forwards',
+                    textShadow: '0 0 5px #facc15, 0 0 10px #facc15, 0 0 15px #eab308'
+                  }}
+                  aria-live="assertive"
+                >
+                  ¡Nivel {level}!
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      );
+    };
+    // --- END OF App.tsx content ---
+
+    const rootElement = document.getElementById('root');
+    const root = ReactDOM.createRoot(rootElement);
+    root.render(<App />);
+  </script>
+</body>
+</html>
+<link rel="stylesheet" href="index.css">
+<script src="index.tsx" type="module"></script>
